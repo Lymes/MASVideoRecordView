@@ -126,6 +126,7 @@ public class MASCameraService: NSObject, ObservableObject {
     
     
     public func startVideoRecording(file: URL, frameCallback: MASFrameCallback? = nil) {
+        guard self.state == .idle else { return }
         print("Starting write to", file)
         self.frameCallback = frameCallback
         self.state = .starting
@@ -173,6 +174,7 @@ public class MASCameraService: NSObject, ObservableObject {
     }
     
     public func stopVideoRecording() {
+        guard self.state == .started else { return }
         self.state = .stopping
         if let writer = self.assetWriter {
             for writerInput in writer.inputs {

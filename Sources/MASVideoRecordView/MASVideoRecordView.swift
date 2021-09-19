@@ -20,9 +20,9 @@ public struct MASVideoRecordView: UIViewRepresentable {
     }
     
     public func updateUIView(_ uiViewController: PreviewView, context: UIViewRepresentableContext<MASVideoRecordView>) {
-        UIView.setAnimationsEnabled(false)
+        //UIView.setAnimationsEnabled(false)
         uiViewController.updateOrientation()
-        UIView.setAnimationsEnabled(true)
+        //UIView.setAnimationsEnabled(true)
     }
 }
 
@@ -43,8 +43,8 @@ public class PreviewView: UIView {
     func updateOrientation() {
         let orientation: AVCaptureVideoOrientation = UIDevice.current.orientation.getAVOrientation()
         self.videoPreview.connection?.videoOrientation = orientation
-        let bounds = self.bounds
-        self.videoPreview.frame = CGRect(x: 0, y: 0, width: bounds.size.height, height: bounds.size.width)
+        //let bounds = self.bounds
+        //self.videoPreview.frame = CGRect(x: 0, y: 0, width: bounds.size.height, height: bounds.size.width)
     }
     
     public override func didMoveToSuperview() {
