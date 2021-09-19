@@ -12,6 +12,8 @@ import AVFoundation
 
 public struct MASVideoRecordView: UIViewRepresentable {
     
+    public init() {}
+
     public func makeUIView(context: UIViewRepresentableContext<MASVideoRecordView>) -> PreviewView {
         let recordingView = PreviewView(/*showingAlert: self.$showingAlert*/)
         return recordingView
@@ -19,7 +21,7 @@ public struct MASVideoRecordView: UIViewRepresentable {
     
     public func updateUIView(_ uiViewController: PreviewView, context: UIViewRepresentableContext<MASVideoRecordView>) {
         UIView.setAnimationsEnabled(false)
-        uiViewController.checkOrientation()
+        uiViewController.updateOrientation()
         UIView.setAnimationsEnabled(true)
     }
 }
@@ -38,21 +40,9 @@ public class PreviewView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
     
-    func checkOrientation() {
-        let orientation: UIDeviceOrientation = UIDevice.current.orientation
-        self.videoPreview.connection?.videoOrientation = {
-              switch (orientation) {
-              case .portrait:
-                  return .portrait
-              case .landscapeRight:
-                  return .landscapeLeft
-              case .landscapeLeft:
-                  return .landscapeRight
-              default:
-                  return .portrait
-              }
-          }()
-    
+    func updateOrientation() {
+        let orientation: AVCaptureVideoOrientation = UIDevice.current.orientation.getAVOrientation()
+        self.videoPreview.connection?.videoOrientation = orientation
         let bounds = self.bounds
         self.videoPreview.frame = CGRect(x: 0, y: 0, width: bounds.size.height, height: bounds.size.width)
     }
@@ -73,7 +63,7 @@ public class PreviewView: UIView {
             }
         }
     }
-
+    
     @objc func pinch(_ pinch: UIPinchGestureRecognizer) {
         let newScaleFactor = MASCameraService.shared.minMaxZoom(pinch.scale * lastZoomFactor)
         switch pinch.state {
@@ -85,4 +75,5 @@ public class PreviewView: UIView {
         default: break
         }
     }
+    
 }

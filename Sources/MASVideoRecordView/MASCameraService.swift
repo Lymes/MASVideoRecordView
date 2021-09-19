@@ -6,6 +6,10 @@
 //
 
 import AVFoundation
+import UIKit
+
+
+public typealias MASFrameCallback = (_ buffer: CMSampleBuffer) -> CMSampleBuffer
 
 
 public enum MASCameraServiceError : LocalizedError, Identifiable {
@@ -20,19 +24,30 @@ public enum MASCameraServiceError : LocalizedError, Identifiable {
     }
 }
 
+
+public enum MASRecordingState {
+    case idle
+    case starting
+    case started
+    case stopping
+}
+
+
 public class MASCameraService: NSObject, ObservableObject {
     
     // Singleton
     public static let shared = MASCameraService()
     
-    // Error subscriptions
-    @Published var error: MASCameraServiceError?
+    // subscriptions
+    @Published public var error: MASCameraServiceError?
+    @Published public private(set) var state: MASRecordingState = .idle
     
     // creating session
     let session = AVCaptureSession()
     var cameraDevice: AVCaptureDevice?
     var assetWriter: AVAssetWriter?
-    var sessionAtSourceTime: CMTime?
+    var sessionAtSourceTime: CMTime? = nil
+    var frameCallback: MASFrameCallback? = nil
     
     public var minimumZoom: CGFloat = 1.0
     public var maximumZoom: CGFloat = 5.0
@@ -69,10 +84,10 @@ public class MASCameraService: NSObject, ObservableObject {
                         self?.session.addOutput(output)
                         
                         let videoConnection = output.connection(with: .video)
-                        videoConnection?.videoOrientation = .portrait
+                        //videoConnection?.videoOrientation = .portrait
                         if videoConnection?.isVideoMirroringSupported ?? false
                         {
-                            videoConnection?.isVideoMirrored = true
+                            videoConnection?.isVideoMirrored = false
                         }
                     }
                     completion(self?.session, nil)
@@ -104,18 +119,40 @@ public class MASCameraService: NSObject, ObservableObject {
         }
     }
     
+    
     public func minMaxZoom(_ factor: CGFloat) -> CGFloat {
         return min(min(max(factor, minimumZoom), maximumZoom), self.cameraDevice?.activeFormat.videoMaxZoomFactor ?? 1.0)
     }
     
     
-    public func startVideoRecording(filePath: URL) {
-        if let assetWriter = try? AVAssetWriter(outputURL: filePath, fileType: AVFileType.mp4) {
+    public func startVideoRecording(file: URL, frameCallback: MASFrameCallback? = nil) {
+        print("Starting write to", file)
+        self.frameCallback = frameCallback
+        self.state = .starting
+        do { try FileManager.default.removeItem(at: file) } catch {}
+        if let assetWriter = try? AVAssetWriter(outputURL: file, fileType: AVFileType.mp4) {
+            
+            let orientation: AVCaptureVideoOrientation = UIDevice.current.orientation.getAVOrientation()
+            
+            if let videoConnection = session.outputs.first?.connection(with: .video) {
+                videoConnection.videoOrientation = orientation
+            }
+            
+            var width = 720
+            var height = 1280
+            switch orientation {
+            case .landscapeLeft, .landscapeRight:
+                width = 1280; height = 720
+            case .portrait, .portraitUpsideDown:
+                width = 720; height = 1280
+            @unknown default:
+                break
+            }
             
             let assetWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: [
                 AVVideoCodecKey : AVVideoCodecType.h264,
-                AVVideoWidthKey : 720,
-                AVVideoHeightKey : 1280,
+                AVVideoHeightKey : height,
+                AVVideoWidthKey : width,
                 AVVideoCompressionPropertiesKey : [
                     AVVideoAverageBitRateKey : 4000000,
                     AVVideoAllowFrameReorderingKey: false
@@ -123,8 +160,6 @@ public class MASCameraService: NSObject, ObservableObject {
             ])
             
             assetWriterInput.expectsMediaDataInRealTime = true
-            //  assetWriterInput.transform = CGAffineTransform(rotationAngle: .pi/2) // Adapt to portrait mode
-            
             if assetWriter.canAdd(assetWriterInput) {
                 assetWriter.add(assetWriterInput)
             } else {
@@ -133,10 +168,12 @@ public class MASCameraService: NSObject, ObservableObject {
             
             _ = assetWriter.startWriting()
             self.assetWriter = assetWriter
+            self.state = .started
         }
     }
     
     public func stopVideoRecording() {
+        self.state = .stopping
         if let writer = self.assetWriter {
             for writerInput in writer.inputs {
                 if !writerInput.isReadyForMoreMediaData {
@@ -149,7 +186,31 @@ public class MASCameraService: NSObject, ObservableObject {
                 guard let self = self else { return }
                 self.assetWriter = nil
                 self.sessionAtSourceTime = nil
+                DispatchQueue.main.async {
+                    self.state = .idle
+                    print("Finished writing.")
+                }
             }
+        } else {
+            self.state = .idle
+        }
+    }
+    
+}
+
+
+extension UIDeviceOrientation {
+    
+    func getAVOrientation() -> AVCaptureVideoOrientation {
+        switch (self) {
+        case .portrait:
+            return .portrait
+        case .landscapeRight:
+            return .landscapeLeft
+        case .landscapeLeft:
+            return .landscapeRight
+        default:
+            return .portrait
         }
     }
 }
@@ -160,7 +221,7 @@ extension MASCameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
     // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
     
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        connection.videoOrientation = .portrait
+        guard self.assetWriter != nil else { return }
         
         if self.sessionAtSourceTime == nil {
             // start writing
@@ -171,12 +232,11 @@ extension MASCameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
         guard let assetWriterInput = self.assetWriter?.inputs.first else { return }
         
         if assetWriterInput.isReadyForMoreMediaData {
-
-             //if let image = UIImage.imageFromText(text: self.text, attributes: self.attributesForFrame) {
-             //self.write(image: image, toBuffer: sampleBuffer)
-             // write video buffer
-             assetWriterInput.append(sampleBuffer)
-             //}
+            var inputBuffer = sampleBuffer
+            if let callback = self.frameCallback {
+                inputBuffer = callback(sampleBuffer)
+            }
+            assetWriterInput.append(inputBuffer)
         }
     }
     
