@@ -32,6 +32,7 @@ public enum MASRecordingState {
     case stopping
 }
 
+public typealias MASStopCompletion = () -> Void
 
 public class MASCameraService: NSObject, ObservableObject {
     
@@ -71,7 +72,7 @@ public class MASCameraService: NSObject, ObservableObject {
                             let input = try AVCaptureDeviceInput(device: captureDevice)
                             self?.session.addInput(input)
                         } catch {
-                            print(error.localizedDescription)
+                            print("MASCameraService", error.localizedDescription)
                             completion(nil, .underlyingError(error))
                             self?.error = .underlyingError(error)
                         }
@@ -115,7 +116,7 @@ public class MASCameraService: NSObject, ObservableObject {
             defer { self.cameraDevice?.unlockForConfiguration() }
             self.cameraDevice?.videoZoomFactor = factor
         } catch {
-            print("\(error.localizedDescription)")
+            print("\(self): \(error.localizedDescription)")
         }
     }
     
@@ -127,7 +128,7 @@ public class MASCameraService: NSObject, ObservableObject {
     
     public func startVideoRecording(file: URL, frameCallback: MASFrameCallback? = nil) {
         guard self.state == .idle else { return }
-        print("Starting write to", file)
+        print("\(self): starting write to", file)
         self.frameCallback = frameCallback
         self.state = .starting
         do { try FileManager.default.removeItem(at: file) } catch {}
@@ -164,7 +165,7 @@ public class MASCameraService: NSObject, ObservableObject {
             if assetWriter.canAdd(assetWriterInput) {
                 assetWriter.add(assetWriterInput)
             } else {
-                print("no input added")
+                print("\(self): no input added")
             }
             
             _ = assetWriter.startWriting()
@@ -173,13 +174,13 @@ public class MASCameraService: NSObject, ObservableObject {
         }
     }
     
-    public func stopVideoRecording() {
+    public func stopVideoRecording(_ completion: MASStopCompletion? = nil) {
         guard self.state == .started else { return }
         self.state = .stopping
         if let writer = self.assetWriter {
             for writerInput in writer.inputs {
                 if !writerInput.isReadyForMoreMediaData {
-                    print("Boiling out from the second STOP...")
+                    print("\(self): boiling out from the second STOP...")
                     return
                 }
                 writerInput.markAsFinished()
@@ -190,7 +191,8 @@ public class MASCameraService: NSObject, ObservableObject {
                 self.sessionAtSourceTime = nil
                 DispatchQueue.main.async {
                     self.state = .idle
-                    print("Finished writing.")
+                    completion?()
+                    print("\(self): finished writing.")
                 }
             }
         } else {
