@@ -63,7 +63,7 @@ public class MASCameraService: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 if response {
                     // access granted - set up the camera session
-                    self?.session.sessionPreset = .medium
+                    //self?.session.sessionPreset = .medium
                     
                     if let captureDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) {
                         self?.cameraDevice = captureDevice

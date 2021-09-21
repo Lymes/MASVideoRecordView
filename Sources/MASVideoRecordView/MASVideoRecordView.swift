@@ -77,3 +77,10 @@ public class PreviewView: UIView {
     }
     
 }
+
+
+struct MASVideoRecordView_Previews: PreviewProvider {
+    static var previews: some View {
+        MASVideoRecordView()
+    }
+}
