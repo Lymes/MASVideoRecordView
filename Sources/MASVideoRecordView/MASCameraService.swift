@@ -227,9 +227,9 @@ extension MASCameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard self.assetWriter != nil else { return }
         
-        if self.sessionAtSourceTime == nil {
+        if self.sessionAtSourceTime == nil && self.state == .started {
             // start writing
-            sessionAtSourceTime = CMSampleBufferGetOutputPresentationTimeStamp(sampleBuffer)
+            self.sessionAtSourceTime = CMSampleBufferGetOutputPresentationTimeStamp(sampleBuffer)
             self.assetWriter?.startSession(atSourceTime: sessionAtSourceTime!)
         }
         
